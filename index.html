@@ -1,0 +1,294 @@
+<!DOCTYPE html>
+<html lang="zh">
+<!-- 前面的 head 和 style 部分保持不变 -->
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>圆形幸运大转盘</title>
+    <style>
+        /* 之前的样式保持不变 */
+        body {
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            height: 100vh;
+            margin: 0;
+            background-color: #f0f0f0;
+            font-family: Arial, sans-serif;
+        }
+
+        .wheel-container {
+            position: relative;
+            width: 300px;
+            height: 300px;
+        }
+
+        canvas {
+            position: absolute;
+            top: 0;
+            left: 0;
+            transition: transform 4s cubic-bezier(0.17, 0.67, 0.12, 0.99);
+            transform: rotate(0deg);
+        }
+
+        .pointer {
+            position: absolute;
+            top: -20px;
+            left: 50%;
+            transform: translateX(-50%);
+            width: 0;
+            height: 0;
+            border-left: 15px solid transparent;
+            border-right: 15px solid transparent;
+            border-top: 30px solid #ff4444;
+            z-index: 2;
+        }
+
+        #spin-button {
+            margin-top: 30px;
+            padding: 10px 30px;
+            font-size: 18px;
+            background-color: #4CAF50;
+            color: white;
+            border: none;
+            border-radius: 5px;
+            cursor: pointer;
+            transition: background-color 0.3s;
+        }
+
+        #spin-button:disabled {
+            background-color: #cccccc;
+            cursor: not-allowed;
+        }
+
+        .congratulations {
+            position: fixed;
+            top: 50%;
+            left: 50%;
+            transform: translate(-50%, -50%);
+            background-color: rgba(255, 255, 255, 0.9);
+            padding: 20px;
+            border-radius: 10px;
+            text-align: center;
+            display: none;
+            z-index: 1000;
+            box-shadow: 0 0 20px rgba(0,0,0,0.2);
+        }
+
+        .firework {
+            position: fixed;
+            pointer-events: none;
+            z-index: 999;
+        }
+
+        #final-result {
+            margin-top: 20px;
+            font-size: 24px;
+            color: #333;
+            text-align: center;
+            display: none;
+        }
+    </style>
+</head>
+<body>
+    <div class="wheel-container">
+        <div class="pointer"></div>
+        <canvas id="wheelCanvas" width="300" height="300"></canvas>
+    </div>
+    <button id="spin-button">开始抽奖</button>
+    <div id="final-result"></div>
+    <div class="congratulations" id="congratulations">
+        <h2>恭喜您!</h2>
+        <p>您抽中了 <span id="prize-amount"></span>!</p>
+        <p style="color: #ff4444;">每位家长仅限抽奖一次，感谢参与！</p>
+    </div>
+
+    <script>
+        const canvas = document.getElementById('wheelCanvas');
+        const ctx = canvas.getContext('2d');
+        // 定义奖项及其概率权重
+        const prizes = [
+            { name: 'RM8', weight: 35 },
+            { name: 'RM28', weight: 30 },
+            { name: 'RM38', weight: 20 },
+            { name: 'RM68', weight: 10 },
+            { name: 'RM88', weight: 5 }
+        ];
+        let canSpin = true;
+
+        // 检查是否已经抽过奖
+        if (localStorage.getItem('hasSpun') === 'true') {
+            const previousPrize = localStorage.getItem('prizeName');
+            document.getElementById('spin-button').disabled = true;
+            document.getElementById('final-result').style.display = 'block';
+            document.getElementById('final-result').textContent = `您已经抽过奖了，获得了 ${previousPrize}`;
+            canSpin = false;
+        }
+
+        // 加权随机算法
+        function weightedRandom() {
+            const totalWeight = prizes.reduce((sum, prize) => sum + prize.weight, 0);
+            let random = Math.random() * totalWeight;
+            
+            for (let i = 0; i < prizes.length; i++) {
+                random -= prizes[i].weight;
+                if (random <= 0) {
+                    return i;
+                }
+            }
+            return prizes.length - 1;
+        }
+
+        function drawWheel() {
+            const centerX = canvas.width / 2;
+            const centerY = canvas.height / 2;
+            const radius = canvas.width / 2 - 10;
+            const anglePerPrize = (Math.PI * 2) / prizes.length;
+
+            ctx.beginPath();
+            ctx.arc(centerX, centerY, radius, 0, Math.PI * 2);
+            ctx.strokeStyle = '#333';
+            ctx.lineWidth = 2;
+            ctx.stroke();
+
+            prizes.forEach((prize, index) => {
+                ctx.beginPath();
+                ctx.moveTo(centerX, centerY);
+                const startAngle = (index * anglePerPrize) - Math.PI / 2 - (anglePerPrize / 2);
+                ctx.arc(centerX, centerY, radius, startAngle, startAngle + anglePerPrize);
+                ctx.closePath();
+
+                const gradient = ctx.createRadialGradient(
+                    centerX, centerY, 0,
+                    centerX, centerY, radius
+                );
+                const hue = index * (360 / prizes.length);
+                gradient.addColorStop(0, `hsl(${hue}, 70%, 60%)`);
+                gradient.addColorStop(1, `hsl(${hue}, 70%, 45%)`);
+                
+                ctx.fillStyle = gradient;
+                ctx.fill();
+                ctx.stroke();
+
+                ctx.save();
+                ctx.translate(centerX, centerY);
+                ctx.rotate(startAngle + anglePerPrize / 2);
+                ctx.textAlign = 'right';
+                ctx.fillStyle = 'white';
+                ctx.font = 'bold 16px Arial';
+                ctx.fillText(prize.name, radius - 20, 6);
+                ctx.restore();
+            });
+
+            ctx.beginPath();
+            ctx.arc(centerX, centerY, 20, 0, Math.PI * 2);
+            ctx.fillStyle = '#fff';
+            ctx.fill();
+            ctx.stroke();
+        }
+
+        function createFirework(x, y) {
+            const firework = document.createElement('div');
+            firework.className = 'firework';
+            firework.style.left = x + 'px';
+            firework.style.top = y + 'px';
+            document.body.appendChild(firework);
+
+            for (let i = 0; i < 30; i++) {
+                const particle = document.createElement('div');
+                particle.style.position = 'absolute';
+                particle.style.width = '4px';
+                particle.style.height = '4px';
+                particle.style.background = `hsl(${Math.random() * 360}, 100%, 50%)`;
+                particle.style.borderRadius = '50%';
+                firework.appendChild(particle);
+
+                const angle = Math.random() * Math.PI * 2;
+                const velocity = 2 + Math.random() * 3;
+                const dx = Math.cos(angle) * velocity;
+                const dy = Math.sin(angle) * velocity;
+                let x = 0;
+                let y = 0;
+                let opacity = 1;
+
+                const animate = () => {
+                    if (opacity <= 0) {
+                        firework.remove();
+                        return;
+                    }
+                    x += dx;
+                    y += dy;
+                    opacity -= 0.02;
+                    particle.style.transform = `translate(${x}px, ${y}px)`;
+                    particle.style.opacity = opacity;
+                    requestAnimationFrame(animate);
+                };
+                animate();
+            }
+        }
+
+        function showCongratulations(prize) {
+            const congrats = document.getElementById('congratulations');
+            document.getElementById('prize-amount').textContent = prize;
+            congrats.style.display = 'block';
+            
+            document.getElementById('final-result').style.display = 'block';
+            document.getElementById('final-result').textContent = `您抽中了 ${prize}`;
+            
+            if (prize === 'RM88') {
+                for (let i = 0; i < 5; i++) {
+                    setTimeout(() => {
+                        const x = Math.random() * window.innerWidth;
+                        const y = Math.random() * window.innerHeight;
+                        createFirework(x, y);
+                    }, i * 300);
+                }
+            }
+
+            setTimeout(() => {
+                congrats.style.display = 'none';
+            }, 3000);
+
+            localStorage.setItem('hasSpun', 'true');
+            localStorage.setItem('prizeName', prize);
+        }
+
+        function spinWheel() {
+            if (!canSpin) return;
+            
+            const spinButton = document.getElementById('spin-button');
+            const wheelCanvas = document.getElementById('wheelCanvas');
+            spinButton.disabled = true;
+            canSpin = false;
+
+            // 使用加权随机算法选择奖项
+            const selectedIndex = weightedRandom();
+            const rotations = 5;
+            const sectionAngle = 360 / prizes.length;
+            const targetAngle = -(rotations * 360 + (selectedIndex * sectionAngle));
+            
+            wheelCanvas.style.transform = `rotate(${targetAngle}deg)`;
+
+            setTimeout(() => {
+                showCongratulations(prizes[selectedIndex].name);
+            }, 4000);
+        }
+
+        // 初始化
+        drawWheel();
+        document.getElementById('spin-button').addEventListener('click', spinWheel);
+    </script>
+</body>
+</html>
+localStorage.removeItem('hasSpun');
+localStorage.removeItem('prizeName');
+<p style="color: #ff4444;">每位家长仅限抽奖一次，感谢参与！</p>
+const prizes = [
+    { name: 'RM8', weight: 35 },    // 35% 概率
+    { name: 'RM28', weight: 30 },   // 30% 概率
+    { name: 'RM38', weight: 20 },   // 20% 概率
+    { name: 'RM68', weight: 10 },   // 10% 概率
+    { name: 'RM88', weight: 5 }     // 5% 概率
+];
+const selectedIndex = weightedRandom();
